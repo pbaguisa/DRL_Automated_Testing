@@ -1,6 +1,6 @@
 import gym
 from stable_baselines3 import PPO
-from bubble_game_env import BubbleGameEnv
+from envs.game.bubble_game_env import BubbleGameEnv
 
 # Create the environment
 env = BubbleGameEnv()
