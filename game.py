@@ -42,6 +42,9 @@ class Player:
     def get_center(self):
         return (self.x + self.width // 2, self.y)
 
+    def get_edges(self):
+        return (self.x, self.x + self.width, self.y, self.y + self.height)
+
 # Bullet (Harpoon tip) class
 class Bullet:
     def __init__(self, x, y):
@@ -76,8 +79,8 @@ class Bubble:
         self.y = y
         self.size = size  # radius
         self.color = GREEN
-        self.x_vel = x_vel
-        self.y_vel = y_vel
+        self.x_vel = x_vel * 0.5  # Slower horizontal speed
+        self.y_vel = y_vel * 0.5  # Slower vertical speed
         self.gravity = 0.3
 
     def update(self):
@@ -126,14 +129,41 @@ class Bubble:
         dist = math.hypot(px - closest_x, py - closest_y)
         return dist < self.size
 
+    def collide_with_player(self, player):
+        player_left, player_right, player_top, player_bottom = player.get_edges()
+
+        # Check for overlap between bubble and player’s rectangle
+        # Check distance from player’s rectangle edges to the bubble’s perimeter
+        dist_x = abs(self.x - (player_left + player_right) / 2)
+        dist_y = abs(self.y - (player_top + player_bottom) / 2)
+
+        if dist_x > (player_right - player_left) / 2 + self.size:
+            return False
+        if dist_y > (player_bottom - player_top) / 2 + self.size:
+            return False
+
+        if dist_x <= (player_right - player_left) / 2 or dist_y <= (player_bottom - player_top) / 2:
+            return True
+
+        corner_distance_sq = (dist_x - (player_right - player_left) / 2) ** 2 + \
+                             (dist_y - (player_bottom - player_top) / 2) ** 2
+        return corner_distance_sq <= self.size ** 2
+
 # Game variables
 player = Player()
 bullet = None  # only one bullet allowed at a time
 bubbles = []
 
-# Initial bubbles
-bubbles.append(Bubble(100, 100, 40, 2, -3))
-bubbles.append(Bubble(500, 150, 40, -1, -2))
+# Function to reset the game
+def reset_game():
+    global player, bullet, bubbles, level
+    player = Player()  # Reset the player position and stats
+    bullet = None  # No bullet at the start
+    bubbles = [Bubble(100, 100, 40, 2, -3), Bubble(500, 150, 40, -1, -2)]  # Reset bubbles
+    level = 1  # Reset level
+
+# Initial setup
+reset_game()
 
 # Main game loop
 running = True
@@ -172,6 +202,12 @@ while running:
         bubble.update()
         bubble.draw()
 
+        # Check for collision with the player (end the game if hit)
+        if bubble.collide_with_player(player):
+            print("Game Over: Player hit by bubble! Restarting the game.")
+            reset_game()  # Restart the game
+            break
+
         # Check collision with bullet tip and rope if bullet active
         if bullet:
             # Check bullet tip collision
@@ -196,6 +232,14 @@ while running:
                     bubbles.remove(bubble)
                     bullet = None
                     break
+
+    # Check if all bubbles are popped and move to the next level
+    if len(bubbles) == 0:
+        print(f"Level {level} completed!")
+        level += 1
+        # Reset the game for the next level
+        bubbles.append(Bubble(100, 100, 40, 2, -3))  # Add new bubbles
+        bubbles.append(Bubble(500, 150, 40, -1, -2))
 
     pygame.display.flip()
 
