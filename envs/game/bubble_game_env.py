@@ -3,6 +3,7 @@ from gymnasium import spaces
 import numpy as np
 import pygame
 import math
+import random  # To randomize player and bubble positions
 
 # Initialize Pygame
 pygame.init()
@@ -21,7 +22,7 @@ class Player:
     def __init__(self):
         self.width = 30
         self.height = 50
-        self.x = WIDTH // 2
+        self.x = random.randint(0, WIDTH - self.width)  # Randomize initial player position
         self.y = HEIGHT - self.height - 10
         self.speed = 4
         self.color = BLUE
@@ -116,27 +117,33 @@ class BubbleGameEnv(gym.Env):
             dtype=np.float32
         )
 
-        self.player = Player()
-        self.bullet = None
-        self.bubbles = [Bubble(100, 100, 40, 2, -3), Bubble(500, 150, 40, -2, -3)]
         self.score = 0
-        
-        # Initialize frames and max_steps
         self.frames = 0  # Initialize frames count
         self.max_steps = 1000  # Set a max steps limit for each episode (you can change this value)
+
+        self._pygame = None
+        self._screen = None
+        self._clock = None
+
+        self.reset()  # Initialize the environment (with random positions)
 
     def reset(self, seed=None, options=None):
         if seed is not None:
             np.random.seed(seed)
 
-        # Reset the game state
-        self.player = Player()
+        # Reset the game state with random positions for player and bubbles
+        self.player = Player()  # Randomize player position on reset
         self.bullet = None
-        self.bubbles = [Bubble(100, 100, 40, 2, -3), Bubble(500, 150, 40, -1, -2)]
         
-        # Reset the frames counter at the start of each new game
-        self.frames = 0  # Reset frames counter to 0 when resetting the game
+        # Randomize bubbles' positions and velocities
+        self.bubbles = [
+            Bubble(random.randint(0, WIDTH), random.randint(100, HEIGHT - 100), 40, random.uniform(-2, 2), random.uniform(-3, -1)),
+            Bubble(random.randint(0, WIDTH), random.randint(100, HEIGHT - 100), 40, random.uniform(-2, 2), random.uniform(-3, -1))
+        ]
         
+        # Reset frames counter at the start of each new game
+        self.frames = 0
+
         # Create the observation array
         obs = np.array([self.player.x, self.player.y, 
                         self.bullet.x if self.bullet else 0, 
@@ -153,59 +160,83 @@ class BubbleGameEnv(gym.Env):
         return obs, info
 
     def step(self, action):
-        if action == 0:
+        # Process action (move left, move right, shoot bullet)
+        if action == 0:  # Move left
             self.player.x -= self.player.speed
-        elif action == 1:
+        elif action == 1:  # Move right
             self.player.x += self.player.speed
-        elif action == 2:
-            if self.bullet is None:
+        elif action == 2:  # Shoot bullet
+            if self.bullet is None:  # Only shoot if there is no bullet already
                 bullet_x, bullet_y = self.player.get_center()
                 self.bullet = Bullet(bullet_x, bullet_y)
 
+        # Prevent player from moving out of bounds
+        self.player.x = max(0, min(self.player.x, WIDTH - self.player.width))
+
+        # Update bullet if it exists
         if self.bullet:
             self.bullet.update()
-            if self.bullet.y < 0:
+            if self.bullet.y < 0:  # If the bullet goes off-screen (top side), remove it
                 self.bullet = None
 
         terminated = False
+        total_reward = 0  # Initialize reward for this step
+
         for bubble in self.bubbles[:]:
             bubble.update()
+            
+            # Reward for passing safely under the bubble gap
+            gap_top = bubble.y - bubble.size  # Top of the gap
+            gap_bottom = bubble.y + bubble.size  # Bottom of the gap
+            if self.player.y < gap_top and self.player.y + self.player.height > gap_bottom:
+                total_reward += 5  # Reward for safely passing under the bubble gap
+        
             if bubble.collide_with_player(self.player):
-                terminated = True
+                terminated = True  # Episode ends if player collides with a bubble
                 return np.array([self.player.x, self.player.y, self.bullet.x if self.bullet else 0,
                                  self.bullet.y if self.bullet else 0, self.bubbles[0].x, self.bubbles[0].y,
                                  self.bubbles[1].x, self.bubbles[1].y]), -100, terminated, False, {}
 
+            # Reward for shooting the bubble
             if self.bullet and bubble.collide_with_point(self.bullet.x, self.bullet.y):
                 if bubble.size > 15:
                     new_size = bubble.size // 2
                     self.bubbles.append(Bubble(bubble.x, bubble.y, new_size, -abs(bubble.x_vel), -8))
                     self.bubbles.append(Bubble(bubble.x, bubble.y, new_size, abs(bubble.x_vel), -8))
-                self.bubbles.remove(bubble)
-                self.bullet = None
-                break
+                self.bubbles.remove(bubble)  # Remove the bubble
+                self.bullet = None  # Destroy the bullet
+                total_reward += 10  # Reward for shooting a bubble
 
         truncated = False
         self.frames += 1  # Increment frames counter each time step is taken
         if self.frames >= self.max_steps:
             truncated = True  # Mark the episode as truncated if it exceeds max steps
 
+        # Return the 5 values: observation, reward, terminated, truncated, info
         return np.array([self.player.x, self.player.y, self.bullet.x if self.bullet else 0,
                          self.bullet.y if self.bullet else 0, self.bubbles[0].x, self.bubbles[0].y,
-                         self.bubbles[1].x, self.bubbles[1].y]), 0, terminated, truncated, {}
-
-
+                         self.bubbles[1].x, self.bubbles[1].y]), total_reward, terminated, truncated, {}
 
     def render(self, mode='human'):
-        self.screen.fill((0, 0, 0))
-        self.player.draw(self.screen)
+        self._lazy_pygame()  # Ensure Pygame and screen are initialized
+
+        self._screen.fill((0, 0, 0))  # Fill the screen with black (clear previous frame)
+        self.player.draw(self._screen)
         for bubble in self.bubbles:
-            bubble.draw(self.screen)
+            bubble.draw(self._screen)
         if self.bullet:
-            self.bullet.draw(self.screen)
+            self.bullet.draw(self._screen)
 
         if mode == 'rgb_array':
-            img = pygame.surfarray.array3d(self.screen)
-            return img.transpose(2, 0, 1)
+            img = pygame.surfarray.array3d(self._screen)
+            return img.transpose(2, 0, 1)  # Convert to (C, H, W) format for ML
         elif mode == 'human':
-            pygame.display.flip()
+            pygame.display.flip()  # Update the display for human visualization
+
+    def _lazy_pygame(self):
+        if self._pygame is None:
+            import pygame
+            self._pygame = pygame
+            self._pygame.init()
+            self._screen = pygame.display.set_mode((WIDTH, HEIGHT))
+            self._clock = pygame.time.Clock()
