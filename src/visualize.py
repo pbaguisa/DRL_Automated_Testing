@@ -13,12 +13,29 @@ def main():
 
     model = PPO.load(args.model_path)  # Load the trained model
 
+    '''
+    change
+    '''
+
+    # env = BubbleGameEnv()
+    # obs, info = env.reset()
+    # done,trunc = False, False
+
+    # while not (done or trunc):
+    #     action, _ = model.predict(obs, deterministic=True)
+    #     obs, r, done, trunc, info = env.step(int(action))
+    # env.close()
+
+    '''
+    original
+    '''
+
     # Initialize environment
     env = BubbleGameEnv()
 
     # Run one trial
     obs, info = env.reset()
-    done = False
+    done, trunc = False, False
 
     # Run a single trial until the agent loses or the trial reaches max steps
     while not done:
