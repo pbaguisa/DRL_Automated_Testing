@@ -1,5 +1,6 @@
 import gymnasium as gym
 from gymnasium import spaces
+from typing import Optional, Tuple
 import numpy as np
 import pygame
 import math
@@ -19,10 +20,10 @@ BLUE = (0, 0, 255)
 GREEN = (0, 255, 0)
 
 class Player:
-    def __init__(self):
+    def __init__(self, x):
         self.width = 30
         self.height = 50
-        self.x = random.randint(0, WIDTH - self.width)  # Randomize initial player position
+        self.x = x
         self.y = HEIGHT - self.height - 10
         self.speed = 4
         self.color = BLUE
@@ -107,60 +108,66 @@ class Bubble:
         return dist < self.size
 
 class BubbleGameEnv(gym.Env):
-    def __init__(self):
+    def __init__(self, render_mode: Optional[str] = None, seed: Optional[int] = None):
         super().__init__()
+        self._rnd = random.Random(seed)
+        self._np_rng = np.random.default_rng(seed)
+        self.render_mode = render_mode
 
-        self.action_space = spaces.Discrete(3)  # move left, move right, shoot
+        self.action_space = spaces.Discrete(3)
         self.observation_space = spaces.Box(
-            low=np.array([0, 0, 0, 0, 0, 0, 0, 0]),
-            high=np.array([WIDTH, HEIGHT, WIDTH, HEIGHT, WIDTH, HEIGHT, WIDTH, HEIGHT]),
-            dtype=np.float32
+            low=np.zeros(8, dtype=np.float32),
+            high=np.array([WIDTH, HEIGHT, WIDTH, HEIGHT, WIDTH, HEIGHT, WIDTH, HEIGHT], dtype=np.float32),
+            shape=(8,), dtype=np.float32
         )
-
         self.score = 0
-        self.frames = 0  # Initialize frames count
-        self.max_steps = 100000 # Set a max steps limit for each episode (you can change this value)
+        self.frames = 0
+        self.max_steps = 100000
 
         self._pygame = None
         self._screen = None
         self._clock = None
 
-        self.reset()  # Initialize the environment (with random positions)
+        # defer actual state creation to reset()
 
-    def reset(self, seed=None, options=None):
+    def _obs(self) -> np.ndarray:
+        bx = [0.0, 0.0]; by = [0.0, 0.0]
+        n = min(2, len(self.bubbles))
+        for i in range(n):
+            bx[i] = float(self.bubbles[i].x); by[i] = float(self.bubbles[i].y)
+        obs = np.array([
+            float(self.player.x), float(self.player.y),
+            float(self.bullet.x if self.bullet else 0.0),
+            float(self.bullet.y if self.bullet else 0.0),
+            bx[0], by[0], bx[1], by[1]
+        ], dtype=np.float32)
+        return obs
+
+    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
+        super().reset(seed=seed)
         if seed is not None:
-            np.random.seed(seed)
+            self._rnd.seed(seed)
+            self._np_rng = np.random.default_rng(seed)
 
-        # Reset the game state with random positions for player and bubbles
-        self.player = Player()  # Randomize player position on reset
+        # randomized state via private RNG
+        self.player = Player(x=self._rnd.randint(0, WIDTH - 30))
         self.bullet = None
-        
-        # Randomize bubbles' positions and velocities
         self.bubbles = [
-            Bubble(random.randint(0, WIDTH), random.randint(100, HEIGHT - 100), 40, random.uniform(-2, 2), random.uniform(-3, -1)),
-            Bubble(random.randint(0, WIDTH), random.randint(100, HEIGHT - 100), 40, random.uniform(-2, 2), random.uniform(-3, -1))
+            Bubble(self._rnd.randint(0, WIDTH), self._rnd.randint(100, HEIGHT - 100), 40,
+                   self._rnd.uniform(-2, 2), self._rnd.uniform(-3, -1)),
+            Bubble(self._rnd.randint(0, WIDTH), self._rnd.randint(100, HEIGHT - 100), 40,
+                   self._rnd.uniform(-2, 2), self._rnd.uniform(-3, -1))
         ]
-        
-        # Reset frames counter at the start of each new game
         self.frames = 0
 
-        # Create the observation array
-        obs = np.array([self.player.x, self.player.y, 
-                        self.bullet.x if self.bullet else 0, 
-                        self.bullet.y if self.bullet else 0, 
-                        self.bubbles[0].x, self.bubbles[0].y, 
-                        self.bubbles[1].x, self.bubbles[1].y])
+        info = {"score": self.score, "bubbles_active": len(self.bubbles)}
+        return self._obs(), info
 
-        # Info dictionary to return along with the observation
-        info = {
-            "score": self.score,
-            "bubbles_active": len(self.bubbles),
-        }
-
-        return obs, info
 
     def step(self, action):
         # Process action (move left, move right, shoot bullet)
+
+
         if action == 0:  # Move left
             self.player.x -= self.player.speed
         elif action == 1:  # Move right
@@ -185,11 +192,12 @@ class BubbleGameEnv(gym.Env):
         for bubble in self.bubbles[:]:
             bubble.update()
             
-            # Reward for passing safely under the bubble gap
-            gap_top = bubble.y - bubble.size  # Top of the gap
-            gap_bottom = bubble.y + bubble.size  # Bottom of the gap
-            if self.player.y < gap_top and self.player.y + self.player.height > gap_bottom:
-                total_reward += 5  # Reward for safely passing under the bubble gap
+            # reward for being horizontally close under the bubble while not colliding
+            horiz_overlap = abs((self.player.x + self.player.width/2) - bubble.x) < (self.player.width/2 + bubble.size)
+            safe_under = (self.player.y + self.player.height) <= (bubble.y - bubble.size - 10)  # 10px safety margin
+            if horiz_overlap and safe_under:
+                total_reward += 0.1  # small dense reward
+
         
             if bubble.collide_with_player(self.player):
                 terminated = True  # Episode ends if player collides with a bubble
@@ -219,6 +227,10 @@ class BubbleGameEnv(gym.Env):
 
     def render(self, mode='human'):
         self._lazy_pygame()  # Ensure Pygame and screen are initialized
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pass
 
         self._screen.fill((0, 0, 0))  # Fill the screen with black (clear previous frame)
         self.player.draw(self._screen)

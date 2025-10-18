@@ -8,27 +8,10 @@ from envs.game.bubble_game_env import BubbleGameEnv
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, default="models/ppo_bubble_game")
-    parser.add_argument("--fps", type=int, default=60)
+    parser.add_argument("--fps", type=int, default=75)
     args = parser.parse_args()
 
     model = PPO.load(args.model_path)  # Load the trained model
-
-    '''
-    change
-    '''
-
-    # env = BubbleGameEnv()
-    # obs, info = env.reset()
-    # done,trunc = False, False
-
-    # while not (done or trunc):
-    #     action, _ = model.predict(obs, deterministic=True)
-    #     obs, r, done, trunc, info = env.step(int(action))
-    # env.close()
-
-    '''
-    original
-    '''
 
     # Initialize environment
     env = BubbleGameEnv()
