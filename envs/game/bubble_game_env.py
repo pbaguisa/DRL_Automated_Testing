@@ -27,6 +27,8 @@ class Player:
         self.y = HEIGHT - self.height - 10
         self.speed = 4
         self.color = BLUE
+        self._shoot_cooldown = 0
+        self._shoot_cooldown_max = 2
 
     def move(self, keys):
         if keys[pygame.K_LEFT]:
@@ -37,6 +39,28 @@ class Player:
 
     def draw(self, screen):
         pygame.draw.rect(screen, self.color, (self.x, self.y, self.width, self.height))
+
+        # Head center (roughly the top half of the rectangle)
+        head_center_x = self.x + self.width // 2
+        head_center_y = self.y + self.height // 3
+        head_radius = self.width // 2
+
+        # Eyes 
+        eye_radius = max(2, self.width // 10)
+        eye_offset_x = self.width // 4
+        eye_y = head_center_y - self.height // 6
+        pygame.draw.circle(screen, WHITE, (head_center_x - eye_offset_x, eye_y), eye_radius)
+        pygame.draw.circle(screen, WHITE, (head_center_x + eye_offset_x, eye_y), eye_radius)
+
+        # Frown
+        smile_rect = pygame.Rect(
+            head_center_x - self.width // 4,
+            head_center_y,
+            self.width // 2,
+            self.height // 2
+        )
+        pygame.draw.arc(screen, WHITE, smile_rect, math.pi / 8, math.pi - math.pi / 8, 2)
+
 
     def get_center(self):
         return (self.x + self.width // 2, self.y)
@@ -114,15 +138,15 @@ class BubbleGameEnv(gym.Env):
         self._np_rng = np.random.default_rng(seed)
         self.render_mode = render_mode
 
-        self.action_space = spaces.Discrete(3)
+        self.action_space = spaces.Discrete(4)
         self.observation_space = spaces.Box(
-            low=np.zeros(8, dtype=np.float32),
-            high=np.array([WIDTH, HEIGHT, WIDTH, HEIGHT, WIDTH, HEIGHT, WIDTH, HEIGHT], dtype=np.float32),
-            shape=(8,), dtype=np.float32
+            low = np.zeros(8, dtype=np.float32),
+            high = np.array([WIDTH, HEIGHT, WIDTH, HEIGHT, WIDTH, HEIGHT, WIDTH, HEIGHT], dtype=np.float32),
+            shape = (8,), dtype=np.float32
         )
         self.score = 0
         self.frames = 0
-        self.max_steps = 100000
+        self.max_steps = 2000
 
         self._pygame = None
         self._screen = None
@@ -130,7 +154,7 @@ class BubbleGameEnv(gym.Env):
 
         # defer actual state creation to reset()
 
-    def _obs(self) -> np.ndarray:
+    def _obs(self):
         bx = [0.0, 0.0]; by = [0.0, 0.0]
         n = min(2, len(self.bubbles))
         for i in range(n):
@@ -149,6 +173,9 @@ class BubbleGameEnv(gym.Env):
             self._rnd.seed(seed)
             self._np_rng = np.random.default_rng(seed)
 
+        self._shoot_cooldown = 0
+        self._shoot_cooldown_max = 2
+
         # randomized state via private RNG
         self.player = Player(x=self._rnd.randint(0, WIDTH - 30))
         self.bullet = None
@@ -165,65 +192,103 @@ class BubbleGameEnv(gym.Env):
 
 
     def step(self, action):
-        # Process action (move left, move right, shoot bullet)
+        # Coerce SB3 / numpy actions to a clean Python int
+        if isinstance(action, np.ndarray):
+            action = int(action.item() if action.ndim == 0 else action[0])
+        elif isinstance(action, (list, tuple)):
+            action = int(action[0])
+        else:
+            action = int(action)
 
+        total_reward = 0.0
 
-        if action == 0:  # Move left
+        # Tick cooldown
+        if self._shoot_cooldown > 0:
+            self._shoot_cooldown -= 1
+
+        # Actions
+        if action == 0:              # Move left
             self.player.x -= self.player.speed
-        elif action == 1:  # Move right
+        elif action == 1:            # Move right
             self.player.x += self.player.speed
-        elif action == 2:  # Shoot bullet
-            if self.bullet is None:  # Only shoot if there is no bullet already
-                bullet_x, bullet_y = self.player.get_center()
-                self.bullet = Bullet(bullet_x, bullet_y)
+        elif action == 2:            # Shoot
+            if self.bullet is None and self._shoot_cooldown == 0:
+                bx, by = self.player.get_center()
+                self.bullet = Bullet(bx, by)
+                self._shoot_cooldown = self._shoot_cooldown_max
+                total_reward += 0.1   # small reward just for attempting to shoot
+        elif action == 3:
+            pass
 
-        # Prevent player from moving out of bounds
+        # Keep player in bounds
         self.player.x = max(0, min(self.player.x, WIDTH - self.player.width))
 
-        # Update bullet if it exists
+        # Update bullet
         if self.bullet:
             self.bullet.update()
-            if self.bullet.y < 0:  # If the bullet goes off-screen (top side), remove it
+            if not self.bullet.active:
                 self.bullet = None
+            else:
+                # small penalty while a bullet is in-flight (encourages frequent shots)
+                total_reward -= 0.01
 
         terminated = False
-        total_reward = 0  # Initialize reward for this step
 
+        # Update bubbles and compute rewards/collisions
         for bubble in self.bubbles[:]:
             bubble.update()
-            
-            # reward for being horizontally close under the bubble while not colliding
-            horiz_overlap = abs((self.player.x + self.player.width/2) - bubble.x) < (self.player.width/2 + bubble.size)
-            safe_under = (self.player.y + self.player.height) <= (bubble.y - bubble.size - 10)  # 10px safety margin
-            if horiz_overlap and safe_under:
-                total_reward += 0.1  # small dense reward
 
-        
+            # # Dense reward for being safely under the bubble when horizontally near
+            # horiz_overlap = abs((self.player.x + self.player.width / 2) - bubble.x) < (self.player.width / 2 + bubble.size)
+            # safe_under = (self.player.y + self.player.height) <= (bubble.y - bubble.size - 10)
+            # if horiz_overlap and safe_under:
+            #     total_reward += 0.5
+
+            # Neatest bubble (horizontal distance)
+            px_center = float(self.player.x + self.player.width * 0.5)
+
+            if self.bubbles:
+                nearest = min(self.bubbles, key=lambda b: abs(b.x - px_center))
+
+                # Reward grows higher when player directly aligns; capped so its not aimbot lol
+                dx = float(abs(nearest.x - px_center))
+                total_reward += 0.002 * (WIDTH - min(dx, WIDTH))
+
+                # Reward for passing underneath without collision
+                safe_under = (self.player.y + self.player.height) <= (nearest.y - nearest.size - 10)
+                if safe_under and dx < (nearest.size + self.player.width * 0.5):
+                    total_reward += 0.1
+
+            # Wall camping nerf, force movement (penalty)
+            at_left_wall = self.player.x <= 0
+            at_right_wall = self.player.x >= (WIDTH - self.player.width)
+            if at_left_wall or at_right_wall:
+                total_reward -= 0.05
+
+            # Player collision -> end episode
             if bubble.collide_with_player(self.player):
-                terminated = True  # Episode ends if player collides with a bubble
-                return np.array([self.player.x, self.player.y, self.bullet.x if self.bullet else 0,
-                                 self.bullet.y if self.bullet else 0, self.bubbles[0].x, self.bubbles[0].y,
-                                 self.bubbles[1].x, self.bubbles[1].y]), -100, terminated, False, {}
+                return self._obs(), -100.0, True, False, {}
 
-            # Reward for shooting the bubble
+            # Bullet hits bubble -> pop/split
             if self.bullet and bubble.collide_with_point(self.bullet.x, self.bullet.y):
                 if bubble.size > 15:
                     new_size = bubble.size // 2
                     self.bubbles.append(Bubble(bubble.x, bubble.y, new_size, -abs(bubble.x_vel), -8))
-                    self.bubbles.append(Bubble(bubble.x, bubble.y, new_size, abs(bubble.x_vel), -8))
-                self.bubbles.remove(bubble)  # Remove the bubble
-                self.bullet = None  # Destroy the bullet
-                total_reward += 10  # Reward for shooting a bubble
+                    self.bubbles.append(Bubble(bubble.x, bubble.y, new_size,  abs(bubble.x_vel), -8))
+                self.bubbles.remove(bubble)
+                self.bullet = None
+                total_reward += 10.0
+                # continue to process others after mutation
+                continue
 
+        # Time-limit truncation
         truncated = False
-        self.frames += 1  # Increment frames counter each time step is taken
+        self.frames += 1
         if self.frames >= self.max_steps:
-            truncated = True  # Mark the episode as truncated if it exceeds max steps
+            truncated = True
 
-        # Return the 5 values: observation, reward, terminated, truncated, info
-        return np.array([self.player.x, self.player.y, self.bullet.x if self.bullet else 0,
-                         self.bullet.y if self.bullet else 0, self.bubbles[0].x, self.bubbles[0].y,
-                         self.bubbles[1].x, self.bubbles[1].y]), total_reward, terminated, truncated, {}
+        return self._obs(), total_reward, terminated, truncated, {}
+
 
     def render(self, mode='human'):
         self._lazy_pygame()  # Ensure Pygame and screen are initialized
