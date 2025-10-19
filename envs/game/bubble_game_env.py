@@ -38,7 +38,7 @@ class Player:
     def draw(self, screen):
         # body
         pygame.draw.rect(screen, self.color, (self.x, self.y, self.width, self.height))
-        # eyes + smile
+        # eyes + smile (cute face)
         head_cx = self.x + self.width // 2
         head_cy = self.y + self.height // 3
         eye_r   = max(2, self.width // 10)
@@ -157,6 +157,13 @@ class BubbleGameEnv(gym.Env):
         self._shoot_cooldown = 0
         self._shoot_cooldown_max = 2
 
+        # --- episode metrics (for eval) ---
+        self._shots = 0
+        self._pops = 0
+        self._wall_frames = 0
+        self._frames_alive = 0
+        self._dist_accum = 0.0
+
         # pygame lazy init
         self._pygame = None
         self._screen = None
@@ -176,6 +183,21 @@ class BubbleGameEnv(gym.Env):
         ], dtype=np.float32)
         return obs
 
+    def _end_info(self):
+        # compute aggregate metrics at episode end
+        avg_distance = (self._dist_accum / self._frames_alive) if self._frames_alive > 0 else 0.0
+        wall_ratio = self._wall_frames / max(1, self._frames_alive)
+        accuracy = (self._pops / self._shots) if self._shots > 0 else 0.0
+        return {
+            "reward_mode": self.reward_mode,
+            "shots": int(self._shots),
+            "pops": int(self._pops),
+            "frames_alive": int(self._frames_alive),
+            "wall_ratio": float(wall_ratio),
+            "accuracy": float(accuracy),
+            "avg_dist": float(avg_distance),
+        }
+
     # ---------- gym API ----------
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
         super().reset(seed=seed)
@@ -184,6 +206,13 @@ class BubbleGameEnv(gym.Env):
             self._np_rng = np.random.default_rng(seed)
 
         self._shoot_cooldown = 0
+
+        # reset episode metrics
+        self._shots = 0
+        self._pops = 0
+        self._wall_frames = 0
+        self._frames_alive = 0
+        self._dist_accum = 0.0
 
         # randomized state via private RNG
         self.player = Player(x=self._rnd.randint(0, WIDTH - 30))
@@ -225,6 +254,7 @@ class BubbleGameEnv(gym.Env):
                 bx, by = self.player.get_center()
                 self.bullet = Bullet(bx, by)
                 self._shoot_cooldown = self._shoot_cooldown_max
+                self._shots += 1
                 # mode-aware shoot reward
                 if self.reward_mode == "survivor":
                     total_reward += 0.5
@@ -235,6 +265,11 @@ class BubbleGameEnv(gym.Env):
 
         # bounds
         self.player.x = max(0, min(self.player.x, WIDTH - self.player.width))
+
+        # metrics: frames + wall time
+        self._frames_alive += 1
+        if self.player.x <= 0 or self.player.x >= (WIDTH - self.player.width):
+            self._wall_frames += 1
 
         # bullet update
         if self.bullet:
@@ -247,9 +282,15 @@ class BubbleGameEnv(gym.Env):
         for bubble in self.bubbles[:]:
             bubble.update()
 
+            # accumulate average horizontal distance to nearest bubble
+            # (we'll pick nearest again below for shaping, but this keeps cost O(n))
+            # do it here by comparing to current bubble; we'll keep the min
+            # simpler: just compute after loop using min(); below we also do shaping with nearest
+
             # player collision => terminate
             if bubble.collide_with_player(self.player):
-                return self._obs(), -100.0, True, False, {}
+                info = self._end_info() | {"deaths": 1}
+                return self._obs(), -100.0, True, False, info
 
             # bullet hit => split/pop
             if self.bullet and bubble.collide_with_point(self.bullet.x, self.bullet.y):
@@ -259,6 +300,7 @@ class BubbleGameEnv(gym.Env):
                     self.bubbles.append(Bubble(bubble.x, bubble.y, new_size,  abs(bubble.x_vel), -8))
                 self.bubbles.remove(bubble)
                 self.bullet = None
+                self._pops += 1
                 popped_this_step = True
                 # (pop reward added in mode-specific section)
                 continue
@@ -269,6 +311,8 @@ class BubbleGameEnv(gym.Env):
             nearest = min(self.bubbles, key=lambda b: abs(b.x - px_center))
             dx = float(abs(nearest.x - px_center))
             safe_under = (self.player.y + self.player.height) <= (nearest.y - nearest.size - 10)
+            # accumulate distance for avg_dist metric
+            self._dist_accum += dx
         else:
             nearest, dx, safe_under = None, WIDTH, False
 
@@ -324,8 +368,11 @@ class BubbleGameEnv(gym.Env):
         self.frames += 1
         if self.frames >= self.max_steps:
             truncated = True
+            info = self._end_info() | {"deaths": 0}
+            return self._obs(), total_reward, False, True, info
 
-        return self._obs(), total_reward, False, truncated, {}
+        # continue episode
+        return self._obs(), total_reward, False, False, {}
 
     # ---------- rendering ----------
     def render(self, mode='human'):
