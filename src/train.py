@@ -2,18 +2,20 @@ import argparse
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-import gymnasium as gym
+
 from stable_baselines3 import PPO
 from envs.game.bubble_game_env import BubbleGameEnv
 
-def make_env(render_mode=None, reward_mode="survival", seed=7):
-    env = BubbleGameEnv()
+def make_env(reward_mode: str, seed: int):
+    # No render during training for speed; env handles its own seeding
+    env = BubbleGameEnv(reward_mode=reward_mode, seed=seed)
     return env
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--timesteps", type=int, default=200_000)
-    parser.add_argument("--reward_mode", type=str, default="survival", choices=["survival", "coverage"])
+    parser.add_argument("--timesteps", type=float, default=200_000)
+    parser.add_argument("--reward_mode", type=str, default="survivor",
+                        choices=["survivor", "speedrunner"])
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--logdir", type=str, default="./logs")
     parser.add_argument("--modeldir", type=str, default="./models")
@@ -26,10 +28,11 @@ def main():
 
     model = PPO("MlpPolicy", env, verbose=1, tensorboard_log=args.logdir, seed=args.seed)
 
-    model.learn(total_timesteps=args.timesteps, progress_bar=True)
+    model.learn(total_timesteps=int(args.timesteps), progress_bar=True)
 
-    model.save(os.path.join(args.modeldir, "ppo_bubble_game"))
-    print(f"Saved model to {args.modeldir}/ppo_bubble_game")
+    model_path = os.path.join(args.modeldir, f"ppo_bubble_{args.reward_mode}")
+    model.save(model_path)
+    print(f"Saved model to {model_path}.zip")
 
 if __name__ == "__main__":
     main()
