@@ -19,8 +19,7 @@ def run_episode(model, env) -> dict:
         action, _ = model.predict(obs, deterministic=True)
         obs, r, done, trunc, info = env.step(action)
         ep_reward += float(r)
-        last_info = info  # only populated with metrics at episode end
-    # merge reward with metrics (provide defaults if env didn't include any)
+        last_info = info  
     metrics = {
         "reward": ep_reward,
         "shots": last_info.get("shots", 0),
@@ -66,7 +65,7 @@ def main():
         rows.append({"episode": ep, **metrics})
         rewards.append(metrics["reward"])
 
-    # Save metrics to CSV
+    # to CSV
     fieldnames = ["episode", "reward", "shots", "pops", "deaths", "frames_alive",
                   "wall_ratio", "accuracy", "avg_dist", "reward_mode"]
     with open(args.csv_out, "w", newline="") as f:

@@ -4,7 +4,7 @@ from typing import Optional
 import numpy as np
 import pygame
 import math
-import random  # private RNG seeded per env
+import random 
 
 # Initialize Pygame (safe even headless)
 pygame.init()
@@ -38,7 +38,8 @@ class Player:
     def draw(self, screen):
         # body
         pygame.draw.rect(screen, self.color, (self.x, self.y, self.width, self.height))
-        # eyes + smile (cute face)
+
+        # face
         head_cx = self.x + self.width // 2
         head_cy = self.y + self.height // 3
         eye_r   = max(2, self.width // 10)
@@ -59,7 +60,6 @@ class Player:
         bottom = self.y + self.height
         return left, right, top, bottom
 
-
 class Bullet:
     def __init__(self, x, y):
         self.x = x
@@ -76,7 +76,6 @@ class Bullet:
 
     def draw(self, screen):
         pygame.draw.circle(screen, self.color, (self.x, self.y), self.radius)
-
 
 class Bubble:
     def __init__(self, x, y, size, x_vel, y_vel):
@@ -122,10 +121,8 @@ class Bubble:
         dist = math.hypot(self.x - point_x, self.y - point_y)
         return dist < self.size
 
-
 class BubbleGameEnv(gym.Env):
     """
-    Bubble Trouble–style env with two reward modes:
       - 'survivor'   : live long, position safely, pop when possible
       - 'speedrunner': end fast by popping quickly; time penalized
     """
@@ -137,7 +134,7 @@ class BubbleGameEnv(gym.Env):
         self._rnd = random.Random(seed)
         self._np_rng = np.random.default_rng(seed)
         self.render_mode = render_mode
-        self.reward_mode = reward_mode  # "survivor" | "speedrunner"
+        self.reward_mode = reward_mode  
 
         # Actions: 0=left, 1=right, 2=shoot, 3=no-op
         self.action_space = spaces.Discrete(4)
@@ -151,13 +148,13 @@ class BubbleGameEnv(gym.Env):
 
         self.score = 0
         self.frames = 0
-        self.max_steps = 2000  # reasonable cap
+        self.max_steps = 2000 
 
         # shooting reliability
         self._shoot_cooldown = 0
         self._shoot_cooldown_max = 2
 
-        # --- episode metrics (for eval) ---
+        # episode metrics (eval.py)
         self._shots = 0
         self._pops = 0
         self._wall_frames = 0
@@ -169,7 +166,7 @@ class BubbleGameEnv(gym.Env):
         self._screen = None
         self._clock = None
 
-    # ---------- helpers ----------
+    # helper functions  
     def _obs(self) -> np.ndarray:
         bx = [0.0, 0.0]; by = [0.0, 0.0]
         n = min(2, len(self.bubbles))
@@ -229,7 +226,6 @@ class BubbleGameEnv(gym.Env):
         return self._obs(), info
 
     def step(self, action):
-        # Coerce to int robustly
         if isinstance(action, np.ndarray):
             action = int(action.item() if action.ndim == 0 else action[0])
         elif isinstance(action, (list, tuple)):
@@ -282,11 +278,6 @@ class BubbleGameEnv(gym.Env):
         for bubble in self.bubbles[:]:
             bubble.update()
 
-            # accumulate average horizontal distance to nearest bubble
-            # (we'll pick nearest again below for shaping, but this keeps cost O(n))
-            # do it here by comparing to current bubble; we'll keep the min
-            # simpler: just compute after loop using min(); below we also do shaping with nearest
-
             # player collision => terminate
             if bubble.collide_with_player(self.player):
                 info = self._end_info() | {"deaths": 1}
@@ -306,7 +297,8 @@ class BubbleGameEnv(gym.Env):
                 continue
 
         # ----- mode-specific shaping -----
-        # nearest bubble helpers
+
+        # nearest bubbles
         if self.bubbles:
             nearest = min(self.bubbles, key=lambda b: abs(b.x - px_center))
             dx = float(abs(nearest.x - px_center))
