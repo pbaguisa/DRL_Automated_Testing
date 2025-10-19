@@ -1,0 +1,3 @@
+algo,reward,pops,frames_alive,accuracy,shots,wall_ratio,deaths,reward_std,pops_std,frames_alive_std,accuracy_std,shots_std,wall_ratio_std,deaths_std,n_seeds
+a2c,885.61927571009,1.8,728.25,0.11626020511047733,14.65,0.0,0.9,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1
+ppo,714.4865892489937,0.35,658.65,0.14791666666666667,1.3,0.4081060928764061,0.9,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1
