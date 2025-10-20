@@ -148,7 +148,7 @@ class BubbleGameEnv(gym.Env):
 
         self.score = 0
         self.frames = 0
-        self.max_steps = 2000 
+        self.max_steps = 200000 # altered
 
         # shooting reliability
         self._shoot_cooldown = 0
