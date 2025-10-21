@@ -44,14 +44,7 @@ Both algorithms were implemented using the **Stable Baselines3 library**.
     .\venv\Scripts\activate
 
 ### Install libraries
-    pip install pygame
-    pip install gym[all]
-    pip install stable_baselines3
-    pip install typing
-    pip install tensorboard
-    pip install numpy
-    pip install pandas
-    pip install matplotlib
+    pip install gym[all] stable_baselines3 typing numpy tensorboard numpy pandas matplotlib
 
 ### To run training:
     python src/train.py --algo ppo --reward_mode survivor --timesteps 200000 --seed 7
@@ -66,24 +59,35 @@ Both algorithms were implemented using the **Stable Baselines3 library**.
 ### To view Tensorboard:
     tensorboard --logdir logs
 
-
 ## Environment 
-### Observations & Actions
-| Component        | Type / Shape             | Description                                                                                                          |
-| ---------------- | ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| **Observations** | `np.array`, shape `(N,)` | Player x-pos, bubble positions, nearest-bubble distance, velocity, time alive, shots, pops, accuracy, wall proximity |
-| **Actions**      | `Discrete(4)`            | `0=Idle`, `1=MoveLeft`, `2=MoveRight`, `3=Shoot`                                                                     |
+### Actions
+| ID | Meaning                   |
+| -: | ------------------------- |
+|  0 | Move Left                 |
+|  1 | Move Right                |
+|  2 | Shoot (cooldown 2 frames) |
+|  3 | No-op                     |
+
+### Observations (shape = 8, float32)
+| Indexes | Description                          |
+| ------- | ------------------------------------ |
+| 0–1     | Player `(x, y)`                      |
+| 2–3     | Bullet `(x, y)` (zeros if no bullet) |
+| 4–5     | Bubble 1 `(x, y)`                    |
+| 6–7     | Bubble 2 `(x, y)`                    |
 
 ### Rewards (by Mode)
-| Event                 | Survivor Mode | Speedrunner Mode |
-| --------------------- | ------------: | ---------------: |
-| Shoot                 |         +0.10 |            +0.20 |
-| Pop bubble            |         +5.00 |           +10.00 |
-| Stay alive (per step) |         +0.05 |            +0.01 |
-| Collision / Death     |        −10.00 |            −2.00 |
-| Idle (no action)      |         −0.50 |             0.00 |
-| Wall camping          |         −2.00 |            −5.00 |
-
+| Event / Term                                 |                                   Survivor Mode |                                Speedrunner Mode |
+| -------------------------------------------- | ----------------------------------------------: | ----------------------------------------------: |
+| **Shoot**                                    |                                         `+0.50` |                                         `+0.75` |
+| **Per-step time shaping**                    |                           `+0.05` (alive bonus) |                          `-0.01` (step penalty) |
+| **Align gain**                               |             `+0.002 × (WIDTH − min(dx, WIDTH))` |             `+0.004 × (WIDTH − min(dx, WIDTH))` |
+| **Proximity bonus** *(under bubble & close)* |                          `+0.10` *(SAFE_BONUS)* |                         `+0.15` *(CLOSE_BONUS)* |
+| **Wall penalty**                             |            `-0.05` per step *(left/right wall)* |                                               — |
+| **Bullet drag**                              |       `-0.005` per step *(while bullet exists)* |                                               — |
+| **Pop bubble**                               |                                         `+10.0` |                                         `+20.0` |
+| **Death (player collision)**                 |                        `-100.0` and `done=True` |                        `-100.0` and `done=True` |
+| **Truncation**                               | `max_steps=200000` → no special terminal reward | `max_steps=200000` → no special terminal reward |
 
 ## Algorithm Configuration
 | Hyperparameter    |        PPO (used) |        A2C (used) | Notes                        |
@@ -98,7 +102,6 @@ Both algorithms were implemented using the **Stable Baselines3 library**.
 | `clip_range`      |           0.1–0.2 |                 — | PPO policy clip only         |
 | `total_timesteps` |           500,000 |           500,000 | Training budget              |
 | `seed`            |                 7 |                 7 | Reproducibility              |
-
 
 
 
