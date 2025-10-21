@@ -103,6 +103,5 @@ Both algorithms were implemented using the **Stable Baselines3 library**.
 | `total_timesteps` |           500,000 |           500,000 | Training budget              |
 | `seed`            |                 7 |                 7 | Reproducibility              |
 
-
-
-
+## PPO Agent in Speedrunner Mode shooting bubbles
+![game_example](https://github.com/user-attachments/assets/7c45bec4-f6a4-454a-a4f6-fe6495cc0e19)
