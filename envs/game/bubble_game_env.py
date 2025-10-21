@@ -6,7 +6,6 @@ import pygame
 import math
 import random 
 
-# Initialize Pygame (safe even headless)
 pygame.init()
 
 # Screen settings
