@@ -104,5 +104,5 @@ Both algorithms were implemented using the **Stable Baselines3 library**.
 | `seed`            |                 7 |                 7 | Reproducibility              
 
 ## 🎬 PPO Agent in Speedrunner Mode shooting bubbles
-<img src="https://github.com/user-attachments/assets/7c45bec4-f6a4-454a-a4f6-fe6495cc0e19" width="750" alt="game_example">
+<img src="https://github.com/user-attachments/assets/7c45bec4-f6a4-454a-a4f6-fe6495cc0e19" width="650" alt="game_example">
 
