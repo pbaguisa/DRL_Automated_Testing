@@ -14,7 +14,7 @@ def main():
                    help="RL algorithm to use (ppo or a2c)")
     p.add_argument("--reward_mode", type=str, choices=["survivor", "speedrunner"],
                    default="survivor", help="Reward shaping mode")
-    p.add_argument("--timesteps", type=int, default=500_000,  # 200,000 -> 500,000
+    p.add_argument("--timesteps", type=int, default=200_000,  # 200,000 -> 500,000
                    help="Number of training timesteps")
     p.add_argument("--seed", type=int, default=0, help="Random seed for reproducibility")
     p.add_argument("--logdir", type=str, default="logs", help="TensorBoard log directory")
@@ -37,10 +37,14 @@ def main():
         model = PPO(
             "MlpPolicy",
             env,
+            n_steps=2048,
+            batch_size=256,
+            gamma=0.999,
+            gae_lambda=0.98,
             verbose=1,
             tensorboard_log=log_path,
             seed=args.seed,
-            learning_rate=0.0003  # 0.0003 -> 0.0005 
+            learning_rate=1e-4 
         )
     elif args.algo == "a2c":
         model = A2C(
@@ -49,7 +53,7 @@ def main():
             verbose=1,
             tensorboard_log=log_path,
             seed=args.seed,
-            learning_rate=0.0007  # 0.0007 -> 0.0008
+            learning_rate=0.0006 
         )
 
     model.learn(total_timesteps=args.timesteps, progress_bar=True)
