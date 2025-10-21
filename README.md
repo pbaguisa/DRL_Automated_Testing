@@ -101,7 +101,8 @@ Both algorithms were implemented using the **Stable Baselines3 library**.
 | `learning_rate`   | 1e-4 (±5e-5…5e-4) | 1e-4 (±5e-5…5e-4) | Lower = more stable          |
 | `clip_range`      |           0.1–0.2 |                 — | PPO policy clip only         |
 | `total_timesteps` |           500,000 |           500,000 | Training budget              |
-| `seed`            |                 7 |                 7 | Reproducibility              |
+| `seed`            |                 7 |                 7 | Reproducibility              
 
 ## 🎬 PPO Agent in Speedrunner Mode shooting bubbles
-<img src="https://github.com/user-attachments/assets/7c45bec4-f6a4-454a-a4f6-fe6495cc0e19" width="700" alt="game_example">
+<img src="https://github.com/user-attachments/assets/7c45bec4-f6a4-454a-a4f6-fe6495cc0e19" width="750" alt="game_example">
+
