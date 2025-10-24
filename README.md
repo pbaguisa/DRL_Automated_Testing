@@ -83,7 +83,7 @@ Both algorithms were implemented using the **Stable Baselines3 library**.
 | **Per-step time shaping**                    |                           `+0.05` (alive bonus) |                          `-0.01` (step penalty) |
 | **Align gain**                               |             `+0.002 × (WIDTH − min(dx, WIDTH))` |             `+0.004 × (WIDTH − min(dx, WIDTH))` |
 | **Proximity bonus** *(under bubble & close)* |                          `+0.10` *(SAFE_BONUS)* |                         `+0.15` *(CLOSE_BONUS)* |
-| **Wall penalty**                             |                                              —  |            `-0.05` per step *(left/right wall)* |
+| **Wall penalty**                             |            `-0.05` per step *(left/right wall)* |                                                 |
 | **Bullet drag**                              |       `-0.005` per step *(while bullet exists)* |                                               — |
 | **Pop bubble**                               |                                         `+10.0` |                                         `+20.0` |
 | **Death (player collision)**                 |                                        `-100.0` |                                        `-100.0` |
