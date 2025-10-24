@@ -1,6 +1,6 @@
-# DRL Automated Testing
+# 🤖 Deep Reinforcement Learning for Automated Testing
 
-## Overview
+## 🧭 Overview
 This project explores the automation of **application testing** using **Deep Reinforcement Learning (DRL).** AI agents were trained using two algorithms—**PPO (Proximal Policy Optimization)** and **A2C (Advantage Actor-Critic)**—within a custom environment called the **Bubble Game.**
 
 The goal is to evaluate how well different DRL agents can **learn to test an application autonomously**, simulating two different behaviour modes:
@@ -8,13 +8,13 @@ The goal is to evaluate how well different DRL agents can **learn to test an app
 🛡️ Survivor Mode – Prioritizes longevity, avoiding risky behaviors.
 ⚡ Speedrunner Mode – Prioritizes aggressive, high-throughput interaction and speed.
 
-## Project Objectives
+## 🎯 Project Objectives
 - Develop a custom **Game Environment** for reinforcement learning experiments
 - Train and compare **PPO** and **A2C** agents using **Stable Baselines3**
 - Explore how different **reward structures** (Survivor v. Speedrunner) affect agent behaviour and performance
 - Log and visualize results using **Tensorboard** and **Matplotlib**
 
-## Algorithms Used
+## 🧮 Algorithms Used
 
 **PPO (Proximal Policy Optimization)**
 - Stable and sample-efficient on-policy algorithm
@@ -25,7 +25,7 @@ The goal is to evaluate how well different DRL agents can **learn to test an app
 - Faster but typically less stable than PPO
 Both algorithms were implemented using the **Stable Baselines3 library**.
 
-## Game Modes
+## 🎮 Game Modes
 
 🛡️ Survivor Mode
 - Rewards for longevity, survival, and avoiding collisions
@@ -37,30 +37,30 @@ Both algorithms were implemented using the **Stable Baselines3 library**.
 - Penalties for inactivity or taking too long to complete tasks
 - Encourages fast, aggressive gameplay and efficiency
 
-## Setup
+## ⚙️ Setup
 
-### Create/Start Virtual Environment
+### 🧩 Create/Start Virtual Environment
     python -m venv venv
     .\venv\Scripts\activate
 
-### Install libraries
+### 📦 Install libraries
     pip install gym[all] stable_baselines3 typing numpy tensorboard numpy pandas matplotlib
 
-### To run training:
+### 🧠 To run training:
     python src/train.py --algo ppo --reward_mode survivor --timesteps 200000 --seed 7
     python src/train.py --algo a2c --reward_mode speedrunner --timesteps 200000 --seed 7
 
-### To evaluate trained models:
+### 🧪 To evaluate trained models:
     python src/eval.py --model_path models/ppo_bubble_survivor_seed7 --reward_mode survivor --episodes 20 --csv_out logs/ppo_survivor.csv
 
-### To visualize: 
+### 🎥 To visualize: 
     python src/visualize.py --model_path models/ppo_bubble_survivor_seed7 --reward_mode survivor --fps 60
 
-### To view Tensorboard:
+### 📊 To view Tensorboard:
     tensorboard --logdir logs
 
-## Environment 
-### Actions
+## 🌍 Environment 
+### 🎮 Actions
 | ID | Meaning                   |
 | -: | ------------------------- |
 |  0 | Move Left                 |
@@ -68,7 +68,7 @@ Both algorithms were implemented using the **Stable Baselines3 library**.
 |  2 | Shoot (cooldown 2 frames) |
 |  3 | No-op                     |
 
-### Observations (shape = 8, float32)
+### 👁️ Observations (shape = 8, float32)
 | Indexes | Description                          |
 | ------- | ------------------------------------ |
 | 0–1     | Player `(x, y)`                      |
@@ -76,33 +76,33 @@ Both algorithms were implemented using the **Stable Baselines3 library**.
 | 4–5     | Bubble 1 `(x, y)`                    |
 | 6–7     | Bubble 2 `(x, y)`                    |
 
-### Rewards (by Mode)
+### 💰 Rewards (by Mode)
 | Event / Term                                 |                                   Survivor Mode |                                Speedrunner Mode |
 | -------------------------------------------- | ----------------------------------------------: | ----------------------------------------------: |
 | **Shoot**                                    |                                         `+0.50` |                                         `+0.75` |
 | **Per-step time shaping**                    |                           `+0.05` (alive bonus) |                          `-0.01` (step penalty) |
 | **Align gain**                               |             `+0.002 × (WIDTH − min(dx, WIDTH))` |             `+0.004 × (WIDTH − min(dx, WIDTH))` |
 | **Proximity bonus** *(under bubble & close)* |                          `+0.10` *(SAFE_BONUS)* |                         `+0.15` *(CLOSE_BONUS)* |
-| **Wall penalty**                             |            `-0.05` per step *(left/right wall)* |                                               — |
+| **Wall penalty**                             |            `-0.05` per step *(left/right wall)* |                                                 |
 | **Bullet drag**                              |       `-0.005` per step *(while bullet exists)* |                                               — |
 | **Pop bubble**                               |                                         `+10.0` |                                         `+20.0` |
-| **Death (player collision)**                 |                        `-100.0` and `done=True` |                        `-100.0` and `done=True` |
+| **Death (player collision)**                 |                                        `-100.0` |                                        `-100.0` |
 | **Truncation**                               | `max_steps=200000` → no special terminal reward | `max_steps=200000` → no special terminal reward |
 
-## Algorithm Configuration
+Here's the aligned version of your table:
+
+## ⚖️ Algorithm Configuration
 | Hyperparameter    |        PPO (used) |        A2C (used) | Notes                        |
-| ----------------- | ----------------: | ----------------: | ---------------------------- |
+|-------------------|------------------:|------------------:|------------------------------|
 | `policy`          |       `MlpPolicy` |       `MlpPolicy` | Feed-forward MLP             |
-| `n_steps`         |    2048 (or 4096) |    1024 (or 2048) | Rollout length before update |
-| `batch_size`      |      256 (or 512) |      256 (or 512) | Larger → stabler gradients   |
-| `gamma`           |     0.995 → 0.999 |     0.995 → 0.999 | Long-term reward weighting   |
-| `gae_lambda`      |       0.98 → 0.99 |       0.98 → 0.99 | Advantage estimation         |
-| `n_epochs`        |       20 (±10–30) |                10 | SGD passes per update        |
-| `learning_rate`   | 1e-4 (±5e-5…5e-4) | 1e-4 (±5e-5…5e-4) | Lower = more stable          |
-| `clip_range`      |           0.1–0.2 |                 — | PPO policy clip only         |
-| `total_timesteps` |           500,000 |           500,000 | Training budget              |
+| `n_steps`         |              2048 |                —  | Rollout length before update |
+| `batch_size`      |               256 |                —  | Larger → stabler gradients   |
+| `gamma`           |     0.995 → 0.999 |              0.99 | Long-term reward weighting   |
+| `gae_lambda`      |       0.98 → 0.99 |              1.00 | Advantage estimation         |
+| `learning_rate`   |       3e-4 → 1e-4 |       7e-4 → 6e-4 | Lower = more stable          |
+| `total_timesteps` |           200,000 |           200,000 | Training budget              |
 | `seed`            |                 7 |                 7 | Reproducibility              |
 
-
-
+## 🎬 PPO Agent in Speedrunner Mode shooting bubbles
+<img src="https://github.com/user-attachments/assets/7c45bec4-f6a4-454a-a4f6-fe6495cc0e19" width="650" alt="game_example">
 
