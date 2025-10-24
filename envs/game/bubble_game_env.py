@@ -27,6 +27,8 @@ class Player:
         self.speed = 4
         self.color = BLUE
 
+    # Controls
+
     def move(self, keys):
         if keys[pygame.K_LEFT]:
             self.x -= self.speed
@@ -165,7 +167,7 @@ class BubbleGameEnv(gym.Env):
         self._screen = None
         self._clock = None
 
-    # helper functions  
+    # observation space
     def _obs(self) -> np.ndarray:
         bx = [0.0, 0.0]; by = [0.0, 0.0]
         n = min(2, len(self.bubbles))
@@ -180,7 +182,7 @@ class BubbleGameEnv(gym.Env):
         return obs
 
     def _end_info(self):
-        # compute aggregate metrics at episode end
+        # compute aggregate metrics at episode end (csv)
         avg_distance = (self._dist_accum / self._frames_alive) if self._frames_alive > 0 else 0.0
         wall_ratio = self._wall_frames / max(1, self._frames_alive)
         accuracy = (self._pops / self._shots) if self._shots > 0 else 0.0
@@ -224,6 +226,7 @@ class BubbleGameEnv(gym.Env):
         info = {"score": self.score, "bubbles_active": len(self.bubbles), "reward_mode": self.reward_mode}
         return self._obs(), info
 
+    # Input: Step
     def step(self, action):
         if isinstance(action, np.ndarray):
             action = int(action.item() if action.ndim == 0 else action[0])
