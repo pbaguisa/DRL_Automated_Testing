@@ -44,7 +44,7 @@ Both algorithms were implemented using the **Stable Baselines3 library**.
     .\venv\Scripts\activate
 
 ### 📦 Install libraries
-    pip install gym[all] stable_baselines3 typing numpy tensorboard numpy pandas matplotlib
+    pip install gym[all] stable_baselines3 numpy tensorboard numpy pandas matplotlib
 
 ### 🧠 To run training:
     python src/train.py --algo ppo --reward_mode survivor --timesteps 200000 --seed 7
