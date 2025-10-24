@@ -48,7 +48,6 @@ Both algorithms were implemented using the **Stable Baselines3 library**.
 
 ### 🧠 To run training:
     python src/train.py --algo ppo --reward_mode survivor --timesteps 200000 --seed 7
-    python src/train.py --algo a2c --reward_mode speedrunner --timesteps 200000 --seed 7
 
 ### 🧪 To evaluate trained models:
     python src/eval.py --model_path models/ppo_bubble_survivor_seed7 --reward_mode survivor --episodes 20 --csv_out logs/ppo_survivor.csv
