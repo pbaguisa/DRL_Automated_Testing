@@ -95,10 +95,10 @@ Here's the aligned version of your table:
 | Hyperparameter    |        PPO (used) |        A2C (used) | Notes                        |
 |-------------------|------------------:|------------------:|------------------------------|
 | `policy`          |       `MlpPolicy` |       `MlpPolicy` | Feed-forward MLP             |
-| `n_steps`         |    2048 (or 4096) |                —  | Rollout length before update |
-| `batch_size`      |      256 (or 512) |                —  | Larger → stabler gradients   |
-| `gamma`           |     0.995 → 0.999 |            0.99   | Long-term reward weighting   |
-| `gae_lambda`      |       0.98 → 0.99 |            1.00   | Advantage estimation         |
+| `n_steps`         |              2048 |                —  | Rollout length before update |
+| `batch_size`      |               256 |                —  | Larger → stabler gradients   |
+| `gamma`           |     0.995 → 0.999 |              0.99 | Long-term reward weighting   |
+| `gae_lambda`      |       0.98 → 0.99 |              1.00 | Advantage estimation         |
 | `learning_rate`   |       3e-4 → 1e-4 |       7e-4 → 6e-4 | Lower = more stable          |
 | `total_timesteps` |           200,000 |           200,000 | Training budget              |
 | `seed`            |                 7 |                 7 | Reproducibility              |
