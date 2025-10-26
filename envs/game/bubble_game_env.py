@@ -28,7 +28,6 @@ class Player:
         self.color = BLUE
 
     # Controls
-
     def move(self, keys):
         if keys[pygame.K_LEFT]:
             self.x -= self.speed
@@ -149,7 +148,7 @@ class BubbleGameEnv(gym.Env):
 
         self.score = 0
         self.frames = 0
-        self.max_steps = 200000 # altered
+        self.max_steps = 200000
 
         # shooting reliability
         self._shoot_cooldown = 0
@@ -243,11 +242,11 @@ class BubbleGameEnv(gym.Env):
             self._shoot_cooldown -= 1
 
         # actions
-        if action == 0:
-            self.player.x -= self.player.speed
-        elif action == 1:
-            self.player.x += self.player.speed
-        elif action == 2:
+        if action == 0:                             # LEFT
+            self.player.x -= self.player.speed  
+        elif action == 1:                           # RIGHT
+            self.player.x += self.player.speed 
+        elif action == 2:                           # SHOOT / COOLDOWN
             if self.bullet is None and self._shoot_cooldown == 0:
                 bx, by = self.player.get_center()
                 self.bullet = Bullet(bx, by)
@@ -258,8 +257,8 @@ class BubbleGameEnv(gym.Env):
                     total_reward += 0.5
                 elif self.reward_mode == "speedrunner":
                     total_reward += 0.75
-        elif action == 3:
-            pass  # no-op
+        elif action == 3:                           # DO NOTHING
+            pass  
 
         # bounds
         self.player.x = max(0, min(self.player.x, WIDTH - self.player.width))
@@ -342,7 +341,6 @@ class BubbleGameEnv(gym.Env):
             ALIGN_GAIN   = 0.004
             CLOSE_BONUS  = 0.15
             POP_REWARD   = 20.0
-            # no bullet drag; no wall penalty
 
             total_reward -= STEP_PENALTY
 
