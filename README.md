@@ -44,11 +44,10 @@ Both algorithms were implemented using the **Stable Baselines3 library**.
     .\venv\Scripts\activate
 
 ### 📦 Install libraries
-    pip install gym[all] stable_baselines3 typing numpy tensorboard numpy pandas matplotlib
+    pip install gym[all] stable_baselines3 numpy tensorboard numpy pandas matplotlib
 
 ### 🧠 To run training:
     python src/train.py --algo ppo --reward_mode survivor --timesteps 200000 --seed 7
-    python src/train.py --algo a2c --reward_mode speedrunner --timesteps 200000 --seed 7
 
 ### 🧪 To evaluate trained models:
     python src/eval.py --model_path models/ppo_bubble_survivor_seed7 --reward_mode survivor --episodes 20 --csv_out logs/ppo_survivor.csv
@@ -83,7 +82,7 @@ Both algorithms were implemented using the **Stable Baselines3 library**.
 | **Per-step time shaping**                    |                           `+0.05` (alive bonus) |                          `-0.01` (step penalty) |
 | **Align gain**                               |             `+0.002 × (WIDTH − min(dx, WIDTH))` |             `+0.004 × (WIDTH − min(dx, WIDTH))` |
 | **Proximity bonus** *(under bubble & close)* |                          `+0.10` *(SAFE_BONUS)* |                         `+0.15` *(CLOSE_BONUS)* |
-| **Wall penalty**                             |            `-0.05` per step *(left/right wall)* |                                                 |
+| **Wall penalty**                             |            `-0.05` per step *(left/right wall)* |                                               — |
 | **Bullet drag**                              |       `-0.005` per step *(while bullet exists)* |                                               — |
 | **Pop bubble**                               |                                         `+10.0` |                                         `+20.0` |
 | **Death (player collision)**                 |                                        `-100.0` |                                        `-100.0` |
