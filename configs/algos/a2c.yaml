@@ -1,0 +1,4 @@
+algo: a2c
+policy: MlpPolicy
+learning_rate: 6.0e-4
+verbose: 1

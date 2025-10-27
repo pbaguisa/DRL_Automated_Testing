@@ -1,11 +1,38 @@
+# envs/game/bubble_game_env.py
+import os
+import math
+import random
+from typing import Optional, Tuple, List
 import gymnasium as gym
 from gymnasium import spaces
-from typing import Optional
 import numpy as np
 import pygame
-import math
-import random 
 
+# -----------------------------
+# Minimal YAML loader
+# -----------------------------
+from pathlib import Path
+try:
+    import yaml
+except Exception:
+    yaml = None
+
+def _load_yaml(path: str) -> dict:
+    p = Path(path)
+    if not p.exists():
+        return {}
+    if yaml is None:
+        raise ImportError(
+            f"Config file found at {p} but PyYAML is not installed. "
+            "Install with: pip install pyyaml"
+        )
+    with p.open("r") as f:
+        data = yaml.safe_load(f)
+    return data or {}
+
+# -----------------------------
+# Pygame setup
+# -----------------------------
 pygame.init()
 
 # Screen settings
@@ -18,8 +45,12 @@ RED   = (255, 0, 0)
 BLUE  = (0, 0, 255)
 GREEN = (0, 255, 0)
 
+
+# -----------------------------
+# Entities 
+# -----------------------------
 class Player:
-    def __init__(self, x):
+    def __init__(self, x: int):
         self.width = 30
         self.height = 50
         self.x = x
@@ -27,7 +58,6 @@ class Player:
         self.speed = 4
         self.color = BLUE
 
-    # Controls
     def move(self, keys):
         if keys[pygame.K_LEFT]:
             self.x -= self.speed
@@ -38,8 +68,7 @@ class Player:
     def draw(self, screen):
         # body
         pygame.draw.rect(screen, self.color, (self.x, self.y, self.width, self.height))
-
-        # face
+        # simple face
         head_cx = self.x + self.width // 2
         head_cy = self.y + self.height // 3
         eye_r   = max(2, self.width // 10)
@@ -50,18 +79,19 @@ class Player:
         smile_rect = pygame.Rect(head_cx - self.width // 4, head_cy, self.width // 2, self.height // 3)
         pygame.draw.arc(screen, WHITE, smile_rect, math.pi/8, math.pi - math.pi/8, 2)
 
-    def get_center(self):
+    def get_center(self) -> Tuple[int, int]:
         return (self.x + self.width // 2, self.y)
 
-    def get_edges(self):
+    def get_edges(self) -> Tuple[int, int, int, int]:
         left = self.x
         right = self.x + self.width
         top = self.y
         bottom = self.y + self.height
         return left, right, top, bottom
 
+
 class Bullet:
-    def __init__(self, x, y):
+    def __init__(self, x: int, y: int):
         self.x = x
         self.y = y
         self.radius = 6
@@ -77,8 +107,9 @@ class Bullet:
     def draw(self, screen):
         pygame.draw.circle(screen, self.color, (self.x, self.y), self.radius)
 
+
 class Bubble:
-    def __init__(self, x, y, size, x_vel, y_vel):
+    def __init__(self, x: float, y: float, size: int, x_vel: float, y_vel: float):
         self.x = x
         self.y = y
         self.size = size
@@ -91,9 +122,11 @@ class Bubble:
         self.x += self.x_vel
         self.y += self.y_vel
 
+        # bounce on walls
         if self.x - self.size < 0 or self.x + self.size > WIDTH:
             self.x_vel *= -1
 
+        # floor/ceiling with gravity
         if self.y + self.size > HEIGHT:
             self.y = HEIGHT - self.size
             self.y_vel = -abs(self.y_vel)
@@ -117,208 +150,240 @@ class Bubble:
             return False
         return True
 
-    def collide_with_point(self, point_x, point_y) -> bool:
+    def collide_with_point(self, point_x: float, point_y: float) -> bool:
         dist = math.hypot(self.x - point_x, self.y - point_y)
         return dist < self.size
 
+
+# -----------------------------
+# Environment
+# -----------------------------
 class BubbleGameEnv(gym.Env):
     """
-      - 'survivor'   : live long, position safely, pop when possible
-      - 'speedrunner': end fast by popping quickly; time penalized
+    A small bubble shooter environment.
+
+    reward_mode:
+      - 'survivor'    : live long, position safely
+      - 'speedrunner' : finish fast; time costs reward; pops are highly valued
     """
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 60}
 
-    def __init__(self, render_mode: Optional[str] = None, seed: Optional[int] = None,
-                 reward_mode: str = "survivor"):
+    def __init__(
+        self,
+        render_mode: Optional[str] = None,
+        seed: Optional[int] = None,
+        reward_mode: str = "survivor",
+    ):
         super().__init__()
+
+        # RNG
         self._rnd = random.Random(seed)
         self._np_rng = np.random.default_rng(seed)
-        self.render_mode = render_mode
-        self.reward_mode = reward_mode  
 
-        # Actions: 0=left, 1=right, 2=shoot, 3=no-op
+        self.render_mode = render_mode
+        self.reward_mode = reward_mode
+
+        # -----------------------------
+        # Load reward shaping from configs/rewards/<mode>.yaml
+        # (Fallbacks preserve existing behavior if files are absent)
+        # -----------------------------
+        cfg_path = os.path.join("configs", "rewards", f"{self.reward_mode}.yaml")
+        reward_cfg = _load_yaml(cfg_path)
+
+        # shared
+        self._shoot_reward = float(reward_cfg.get("shoot_reward",
+                                   0.5 if self.reward_mode == "survivor" else 0.75))
+
+        # survivor defaults
+        self._sv_alive_bonus = float(reward_cfg.get("alive_bonus", 0.05))
+        self._sv_align_gain  = float(reward_cfg.get("align_gain", 0.002))
+        self._sv_safe_bonus  = float(reward_cfg.get("safe_bonus", 0.1))
+        self._sv_wall_pen    = float(reward_cfg.get("wall_penalty", 0.05))
+        self._sv_pop_reward  = float(reward_cfg.get("pop_reward", 10.0))
+        self._sv_bullet_drag = float(reward_cfg.get("bullet_drag", 0.005))
+
+        # speedrunner defaults
+        self._sr_step_penalty = float(reward_cfg.get("step_penalty", 0.01))
+        self._sr_align_gain   = float(reward_cfg.get("align_gain", 0.004))
+        self._sr_close_bonus  = float(reward_cfg.get("close_bonus", 0.15))
+        self._sr_pop_reward   = float(reward_cfg.get("pop_reward", 20.0))
+
+        # ---- bubble splitting ----
+        self._min_split_size = 12  # when size <= this, bubble is destroyed instead of splitting
+
+        # -----------------------------
+        # Action & Observation spaces
+        # -----------------------------
+        # 0=left, 1=right, 2=shoot, 3=no-op
         self.action_space = spaces.Discrete(4)
 
-        # Observation: [player x,y, bullet x,y, bubble1 x,y, bubble2 x,y]
+        # obs: [player x,y, bullet x,y, bubble1 x,y, bubble2 x,y]
         self.observation_space = spaces.Box(
             low=np.zeros(8, dtype=np.float32),
             high=np.array([WIDTH, HEIGHT, WIDTH, HEIGHT, WIDTH, HEIGHT, WIDTH, HEIGHT], dtype=np.float32),
-            shape=(8,), dtype=np.float32
+            shape=(8,),
+            dtype=np.float32,
         )
 
-        self.score = 0
+        # episode state / metrics
         self.frames = 0
-        self.max_steps = 200000
+        self.max_steps = 200000  # large cap
 
-        # shooting reliability
         self._shoot_cooldown = 0
         self._shoot_cooldown_max = 2
 
-        # episode metrics (eval.py)
         self._shots = 0
         self._pops = 0
         self._wall_frames = 0
         self._frames_alive = 0
         self._dist_accum = 0.0
 
-        # pygame lazy init
+        # pygame stuff (lazy init)
         self._pygame = None
         self._screen = None
         self._clock = None
 
-    # observation space
-    def _obs(self) -> np.ndarray:
-        bx = [0.0, 0.0]; by = [0.0, 0.0]
-        n = min(2, len(self.bubbles))
-        for i in range(n):
-            bx[i] = float(self.bubbles[i].x); by[i] = float(self.bubbles[i].y)
-        obs = np.array([
-            float(self.player.x), float(self.player.y),
-            float(self.bullet.x if self.bullet else 0.0),
-            float(self.bullet.y if self.bullet else 0.0),
-            bx[0], by[0], bx[1], by[1]
-        ], dtype=np.float32)
-        return obs
+        # game objects
+        self.player: Optional[Player] = None
+        self.bullet: Optional[Bullet] = None
+        self.bubbles: List[Bubble] = []
 
-    def _end_info(self):
-        # compute aggregate metrics at episode end (csv)
-        avg_distance = (self._dist_accum / self._frames_alive) if self._frames_alive > 0 else 0.0
-        wall_ratio = self._wall_frames / max(1, self._frames_alive)
-        accuracy = (self._pops / self._shots) if self._shots > 0 else 0.0
-        return {
-            "reward_mode": self.reward_mode,
-            "shots": int(self._shots),
-            "pops": int(self._pops),
-            "frames_alive": int(self._frames_alive),
-            "wall_ratio": float(wall_ratio),
-            "accuracy": float(accuracy),
-            "avg_dist": float(avg_distance),
-        }
+        self.reset(seed=seed)
 
-    # ---------- gym API ----------
-    def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
-        super().reset(seed=seed)
+    # -----------------------------
+    # Gym API
+    # -----------------------------
+    def seed(self, seed: Optional[int] = None):
+        self._rnd = random.Random(seed)
+        self._np_rng = np.random.default_rng(seed)
+
+    def _spawn_bubble(self) -> Bubble:
+        size = self._rnd.choice([22, 26, 30, 34])
+        x = self._rnd.randint(size + 5, WIDTH - size - 5)
+        y = self._rnd.randint(size + 5, HEIGHT // 3)
+        x_vel = self._rnd.choice([-2.2, -1.8, 1.8, 2.2])
+        y_vel = self._rnd.choice([-3.5, -2.8, -3.0])
+        return Bubble(x, y, size, x_vel, y_vel)
+
+    def reset(self, seed: Optional[int] = None, options=None):
         if seed is not None:
-            self._rnd.seed(seed)
-            self._np_rng = np.random.default_rng(seed)
+            self.seed(seed)
 
+        self.frames = 0
         self._shoot_cooldown = 0
 
-        # reset episode metrics
         self._shots = 0
         self._pops = 0
         self._wall_frames = 0
         self._frames_alive = 0
         self._dist_accum = 0.0
 
-        # randomized state via private RNG
-        self.player = Player(x=self._rnd.randint(0, WIDTH - 30))
+        # start with two bubbles
+        self.player = Player(x=WIDTH // 2 - 15)
         self.bullet = None
-        self.bubbles = [
-            Bubble(self._rnd.randint(0, WIDTH), self._rnd.randint(100, HEIGHT - 100), 40,
-                   self._rnd.uniform(-2, 2), self._rnd.uniform(-3, -1)),
-            Bubble(self._rnd.randint(0, WIDTH), self._rnd.randint(100, HEIGHT - 100), 40,
-                   self._rnd.uniform(-2, 2), self._rnd.uniform(-3, -1))
-        ]
-        self.frames = 0
+        self.bubbles = [self._spawn_bubble(), self._spawn_bubble()]
 
-        info = {"score": self.score, "bubbles_active": len(self.bubbles), "reward_mode": self.reward_mode}
-        return self._obs(), info
+        obs = self._get_obs()
+        info = {}
+        return obs, info
 
-    # Input: Step
-    def step(self, action):
-        if isinstance(action, np.ndarray):
-            action = int(action.item() if action.ndim == 0 else action[0])
-        elif isinstance(action, (list, tuple)):
-            action = int(action[0])
-        else:
-            action = int(action)
-
+    def step(self, action: int):
+        self.frames += 1
         total_reward = 0.0
-        popped_this_step = False
+        terminated = False
+        truncated = False
+        info = {}
 
-        # cooldown
+        # shooting cooldown
         if self._shoot_cooldown > 0:
             self._shoot_cooldown -= 1
 
-        # actions
-        if action == 0:                             # LEFT
-            self.player.x -= self.player.speed  
-        elif action == 1:                           # RIGHT
-            self.player.x += self.player.speed 
-        elif action == 2:                           # SHOOT / COOLDOWN
+        # move by action
+        if action == 0:
+            self.player.x -= self.player.speed
+        elif action == 1:
+            self.player.x += self.player.speed
+        elif action == 2:
             if self.bullet is None and self._shoot_cooldown == 0:
                 bx, by = self.player.get_center()
                 self.bullet = Bullet(bx, by)
                 self._shoot_cooldown = self._shoot_cooldown_max
                 self._shots += 1
-                # mode-aware shoot reward
-                if self.reward_mode == "survivor":
-                    total_reward += 0.5
-                elif self.reward_mode == "speedrunner":
-                    total_reward += 0.75
-        elif action == 3:                           # DO NOTHING
-            pass  
+                total_reward += self._shoot_reward
 
-        # bounds
+        # clamp player
         self.player.x = max(0, min(self.player.x, WIDTH - self.player.width))
 
-        # metrics: frames + wall time
-        self._frames_alive += 1
-        if self.player.x <= 0 or self.player.x >= (WIDTH - self.player.width):
-            self._wall_frames += 1
-
-        # bullet update
-        if self.bullet:
+        if self.bullet is not None:
             self.bullet.update()
             if not self.bullet.active:
                 self.bullet = None
 
-        # bubbles + collisions
-        px_center = float(self.player.x + self.player.width * 0.5)
-        for bubble in self.bubbles[:]:
-            bubble.update()
+        for b in self.bubbles:
+            b.update()
 
-            # player collision => terminate
-            if bubble.collide_with_player(self.player):
-                info = self._end_info() | {"deaths": 1}
-                return self._obs(), -100.0, True, False, info
+        # collisions: player vs bubble
+        for b in list(self.bubbles):
+            if b.collide_with_player(self.player):
+                terminated = True
+                break
 
-            # bullet hit => split/pop
-            if self.bullet and bubble.collide_with_point(self.bullet.x, self.bullet.y):
-                if bubble.size > 15:
-                    new_size = bubble.size // 2
-                    self.bubbles.append(Bubble(bubble.x, bubble.y, new_size, -abs(bubble.x_vel), -8))
-                    self.bubbles.append(Bubble(bubble.x, bubble.y, new_size,  abs(bubble.x_vel), -8))
-                self.bubbles.remove(bubble)
+        # ---- collisions: bullet vs bubble  ----
+        popped_this_step = False
+        if self.bullet is not None:
+            hit_index = None
+            for i, b in enumerate(self.bubbles):
+                if b.collide_with_point(self.bullet.x, self.bullet.y):
+                    hit_index = i
+                    break
+
+            if hit_index is not None:
+                b = self.bubbles[hit_index]
                 self.bullet = None
-                self._pops += 1
                 popped_this_step = True
-                # (pop reward added in mode-specific section)
-                continue
+                self._pops += 1
 
-        # ----- mode-specific shaping -----
+                # split at impact into TWO smaller bubbles at same location
+                if b.size > self._min_split_size:
+                    child_size = max(self._min_split_size, b.size // 2)
+                    # give children mirrored horizontal velocities and upward kick
+                    vx_mag = max(1.5, abs(b.x_vel))
+                    vy_up = -abs(max(2.5, abs(b.y_vel)))
+                    left_child  = Bubble(b.x, b.y, child_size, -vx_mag, vy_up)
+                    right_child = Bubble(b.x, b.y, child_size, +vx_mag, vy_up)
+                    # replace hit bubble with left child, append right child
+                    self.bubbles[hit_index] = left_child
+                    self.bubbles.insert(hit_index + 1, right_child)
+                else:
+                    # too small to split: remove it entirely
+                    del self.bubbles[hit_index]
+        # -------------------------------------------------------------
 
-        # nearest bubbles
+        # reward shaping helpers
+        px_center = self.player.x + self.player.width / 2
+        nearest, dx = None, None
         if self.bubbles:
             nearest = min(self.bubbles, key=lambda b: abs(b.x - px_center))
-            dx = float(abs(nearest.x - px_center))
-            safe_under = (self.player.y + self.player.height) <= (nearest.y - nearest.size - 10)
-            # accumulate distance for avg_dist metric
-            self._dist_accum += dx
-        else:
-            nearest, dx, safe_under = None, WIDTH, False
+            dx = abs(nearest.x - px_center)
 
-        at_left_wall  = self.player.x <= 0.0
-        at_right_wall = self.player.x >= (WIDTH - self.player.width)
+        safe_under = nearest is not None and nearest.y + nearest.size < self.player.y
+
+        at_left_wall = self.player.x <= 0
+        at_right_wall = self.player.x >= WIDTH - self.player.width
+        if at_left_wall or at_right_wall:
+            self._wall_frames += 1
+
+        self._frames_alive += 1
+        if dx is not None:
+            self._dist_accum += dx
 
         if self.reward_mode == "survivor":
-            ALIVE_BONUS = 0.05
-            ALIGN_GAIN  = 0.002
-            SAFE_BONUS  = 0.1
-            WALL_PEN    = 0.05
-            POP_REWARD  = 10.0
-            BULLET_DRAG = 0.005
+            ALIVE_BONUS = self._sv_alive_bonus
+            ALIGN_GAIN  = self._sv_align_gain
+            SAFE_BONUS  = self._sv_safe_bonus
+            WALL_PEN    = self._sv_wall_pen
+            POP_REWARD  = self._sv_pop_reward
+            BULLET_DRAG = self._sv_bullet_drag
 
             total_reward += ALIVE_BONUS
 
@@ -337,10 +402,10 @@ class BubbleGameEnv(gym.Env):
                 total_reward += POP_REWARD
 
         elif self.reward_mode == "speedrunner":
-            STEP_PENALTY = 0.01
-            ALIGN_GAIN   = 0.004
-            CLOSE_BONUS  = 0.15
-            POP_REWARD   = 20.0
+            STEP_PENALTY = self._sr_step_penalty
+            ALIGN_GAIN   = self._sr_align_gain
+            CLOSE_BONUS  = self._sr_close_bonus
+            POP_REWARD   = self._sr_pop_reward
 
             total_reward -= STEP_PENALTY
 
@@ -352,42 +417,71 @@ class BubbleGameEnv(gym.Env):
             if popped_this_step:
                 total_reward += POP_REWARD
         else:
-            # fallback minimal alive reward
-            total_reward += 0.05
+            total_reward += 0.05  # fallback
 
-        # time limit
-        truncated = False
-        self.frames += 1
+        # truncation
         if self.frames >= self.max_steps:
             truncated = True
-            info = self._end_info() | {"deaths": 0}
-            return self._obs(), total_reward, False, True, info
 
-        # continue episode
-        return self._obs(), total_reward, False, False, {}
+        obs = self._get_obs()
+        return obs, float(total_reward), terminated, truncated, info
 
-    # ---------- rendering ----------
-    def render(self, mode='human'):
-        self._lazy_pygame()
+    # -----------------------------
+    # Helpers
+    # -----------------------------
+    def _get_obs(self) -> np.ndarray:
+        # player
+        px = float(self.player.x)
+        py = float(self.player.y)
 
-        for event in pygame.event.get():
+        # bullet
+        if self.bullet is None:
+            bx, by = 0.0, 0.0
+        else:
+            bx, by = float(self.bullet.x), float(self.bullet.y)
+
+        # export first two bubbles; pad with zeros if fewer
+        coords: List[Tuple[float, float]] = [(float(b.x), float(b.y)) for b in self.bubbles[:2]]
+        while len(coords) < 2:
+            coords.append((0.0, 0.0))
+
+        obs = np.array([px, py, bx, by, coords[0][0], coords[0][1], coords[1][0], coords[1][1]], dtype=np.float32)
+        return obs
+
+    # -----------------------------
+    # Rendering
+    # -----------------------------
+    def render(self, mode: str = "human"):
+        if mode not in self.metadata["render_modes"]:
+            mode = "human"
+
+        if self._pygame is None:
+            self._lazy_pygame()
+
+        # handle window close
+        for event in self._pygame.event.get():
             if event.type == pygame.QUIT:
-                pass
+                self.close()
+                return
 
         self._screen.fill(BLACK)
+
+        # floor line (visual reference)
+        pygame.draw.line(self._screen, WHITE, (0, HEIGHT - 1), (WIDTH, HEIGHT - 1), 1)
+
+        # draw entities
         self.player.draw(self._screen)
-        for bubble in self.bubbles:
-            bubble.draw(self._screen)
+        for b in self.bubbles:
+            b.draw(self._screen)
         if self.bullet:
             self.bullet.draw(self._screen)
 
-        if mode == 'rgb_array':
-            img = pygame.surfarray.array3d(self._screen)
-            return img.transpose(2, 0, 1)
-        elif mode == 'human':
-            pygame.display.flip()
-            if self._clock:
-                self._clock.tick(self.metadata.get("render_fps", 60))
+        if mode == "human":
+            self._pygame.display.flip()
+            self._clock.tick(self.metadata["render_fps"])
+        else:  # rgb_array
+            arr = self._pygame.surfarray.array3d(self._screen)
+            return np.transpose(arr, (1, 0, 2))
 
     def close(self):
         if self._pygame:
