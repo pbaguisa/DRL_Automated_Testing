@@ -1,0 +1,24 @@
+1. PPO Explorer:
+python src\train.py --algo ppo --reward_mode explorer --timesteps 500000 --seed 7
+python src\eval.py --model_path models\ppo_luigi_explorer_seed7 --reward_mode explorer --episodes 20
+python src\visualize.py --model_path models\ppo_luigi_explorer_seed7 --reward_mode explorer --fps 60
+
+2. PPO Speedrunner:
+python src\train.py --algo ppo --reward_mode speedrunner --timesteps 500000 --seed 7
+python src\eval.py --model_path models\ppo_luigi_speedrunner_seed7 --reward_mode speedrunner --episodes 20
+python src\visualize.py --model_path models\ppo_luigi_speedrunner_seed7 --reward_mode speedrunner --fps 60
+
+3. A2C Explorer:
+python src\train.py --algo a2c --reward_mode explorer --timesteps 500000 --seed 7
+python src\eval.py --model_path models\a2c_luigi_explorer_seed7 --reward_mode explorer --episodes 20
+python src\visualize.py --model_path models\a2c_luigi_explorer_seed7 --reward_mode explorer --fps 60
+
+4. A2C Speedrunner:
+python src\train.py --algo a2c --reward_mode speedrunner --timesteps 500000 --seed 7
+python src\eval.py --model_path models\a2c_luigi_speedrunner_seed7 --reward_mode speedrunner --episodes 20
+python src\visualize.py --model_path models\a2c_luigi_speedrunner_seed7 --reward_mode speedrunner --fps 60
+
+
+View TensorBoard:
+tensorboard --logdir logs
+Then open http://localhost:6006 in your browser.

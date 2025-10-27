@@ -1,0 +1,38 @@
+# PPO Algorithm Configuration for Luigi Bros
+
+# Environment settings
+n_envs: 1
+env_kwargs:
+  reward_mode: "explorer"  # or "speedrunner"
+
+# PPO hyperparameters
+learning_rate: 0.0003
+n_steps: 2048
+batch_size: 256
+n_epochs: 10
+gamma: 0.99
+gae_lambda: 0.95
+clip_range: 0.2
+clip_range_vf: null
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+use_sde: false
+sde_sample_freq: -1
+target_kl: null
+
+# Network architecture
+policy: "MlpPolicy"
+policy_kwargs:
+  net_arch:
+    - 256
+    - 256
+  activation_fn: "tanh"
+
+# Training settings
+total_timesteps: 500000
+log_interval: 10
+save_freq: 50000
+seed: 7
+device: "auto"
+verbose: 1

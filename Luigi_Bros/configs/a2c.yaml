@@ -1,0 +1,36 @@
+# A2C Algorithm Configuration for Luigi Bros
+
+# Environment settings
+n_envs: 1
+env_kwargs:
+  reward_mode: "explorer"  # or "speedrunner"
+
+# A2C hyperparameters
+learning_rate: 0.0007
+n_steps: 1024
+gamma: 0.99
+gae_lambda: 0.95
+ent_coef: 0.01
+vf_coef: 0.5
+max_grad_norm: 0.5
+rms_prop_eps: 1.0e-05
+use_rms_prop: true
+use_sde: false
+sde_sample_freq: -1
+normalize_advantage: false
+
+# Network architecture
+policy: "MlpPolicy"
+policy_kwargs:
+  net_arch:
+    - 256
+    - 256
+  activation_fn: "tanh"
+
+# Training settings
+total_timesteps: 500000
+log_interval: 10
+save_freq: 50000
+seed: 7
+device: "auto"
+verbose: 1
